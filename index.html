@@ -4,13 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CiteSpark Web</title>
+
+  <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
 
+  <!-- Favicon / icons -->
   <link rel="icon" href="icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  
+
+  <!-- Theme -->
   <meta name="theme-color" content="#0b1220">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="background-color" content="#0b1220">
+
   <style>
     :root{--bg:#0b1220;--panel:#0f172a;--fg:#e5e7eb;--muted:#9ca3af;--line:#1f2937;--accent:#0ea5e9;--accent2:#0f766e}
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
@@ -29,8 +34,8 @@
     small{color:var(--muted)}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#111827;margin:6px 6px 0 0}
     footer{color:var(--muted);text-align:center;padding:20px}
-    .hl{color:#34d399}
     .warn{color:#f59e0b}
+    .dim{opacity:.7}
   </style>
 </head>
 <body>
@@ -45,16 +50,17 @@
 </header>
 
 <main>
+  <!-- Web Article Details -->
   <section class="card">
     <div class="row" style="justify-content:space-between">
-      <div><strong>Citation Coach</strong><br><small>Paste or grab details; get MLA/APA/Chicago with live preview.</small></div>
+      <div><strong>Citation Coach</strong><br><small>Web articles or pages</small></div>
       <div class="row">
         <button id="bookmarkletBtn" class="btn ghost">Get Bookmarklet</button>
       </div>
     </div>
     <div class="grid2">
       <label>Author<input id="author" placeholder="e.g., Smith, John or NASA"></label>
-      <label>Title<input id="title" placeholder="Exact article/page title"></label>
+      <label>Title (Article / Page)<input id="title" placeholder="Exact article/page title"></label>
     </div>
     <div class="grid2">
       <label>Site / Publisher<input id="site" placeholder="Website or publisher"></label>
@@ -65,24 +71,44 @@
       <label>Accessed<input id="accessed" value=""></label>
       <label>Style<select id="style"><option>MLA</option><option>APA</option><option>Chicago</option></select></label>
     </div>
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center">
-        <small>Live preview</small>
-        <div class="row">
-          <button id="copy" class="btn">Copy</button>
-          <button id="add" class="btn secondary">Add to Works Cited</button>
-        </div>
-      </div>
-      <div id="preview" class="preview"></div>
-      <div id="hints" class="warn" style="margin-top:6px"></div>
-    </div>
+  </section>
 
-    <div class="card">
-      <small>In‑text citation (MLA style)</small>
+  <!-- Book Details -->
+  <section class="card">
+    <strong>Book Details</strong><br>
+    <small class="dim">Fill these if you’re citing a book (leave the web fields blank if it’s a pure book citation).</small>
+    <div class="grid2" style="margin-top:8px">
+      <label>Book Title<input id="bookTitle" placeholder="e.g., The Great Gatsby"></label>
+      <label>Publisher<input id="publisher" placeholder="e.g., Scribner"></label>
+    </div>
+    <div class="grid2">
+      <label>Year<input id="year" placeholder="e.g., 2004"></label>
+      <label>Edition (optional)<input id="edition" placeholder="e.g., 2nd ed."></label>
+    </div>
+    <div class="grid2">
+      <label>City (optional, Chicago)<input id="city" placeholder="e.g., New York"></label>
+      <div></div>
+    </div>
+  </section>
+
+  <!-- Output -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <small>Live preview</small>
       <div class="row">
-        <input id="page" placeholder="Page # (optional)" style="max-width:180px">
-        <button id="copyInText" class="btn secondary">Copy (Author Page)</button>
+        <button id="copy" class="btn">Copy</button>
+        <button id="add" class="btn secondary">Add to Works Cited</button>
       </div>
+    </div>
+    <div id="preview" class="preview"></div>
+    <div id="hints" class="warn" style="margin-top:6px"></div>
+  </section>
+
+  <section class="card">
+    <small>In-text citation (MLA style)</small>
+    <div class="row">
+      <input id="page" placeholder="Page # (optional)" style="max-width:180px">
+      <button id="copyInText" class="btn secondary">Copy (Author Page)</button>
     </div>
   </section>
 
