@@ -27,6 +27,30 @@
     return `${d.getFullYear()}, ${months[d.getMonth()]} ${d.getDate()}`;
   }
 
+  // ==== ISBN Lookup
+async function lookupISBN(isbn){
+  try {
+    const clean = isbn.replace(/[^0-9X]/gi,''); // strip dashes/spaces
+    const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${clean}&jscmd=data&format=json`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const book = data[`ISBN:${clean}`];
+    if (book){
+      if (book.title) $("bookTitle").value = book.title;
+      if (book.publish_date) $("year").value = book.publish_date.replace(/\D/g,'');
+      if (book.publishers && book.publishers.length) $("publisher").value = book.publishers[0].name;
+      if (book.authors && book.authors.length) $("bookAuthor").value = book.authors.map(a=>a.name).join(", ");
+      render();
+    } else {
+      alert("No book found for that ISBN.");
+    }
+  } catch(err){
+    console.error(err);
+    alert("Error fetching ISBN data.");
+  }
+}
+
+
   // ==== Gather inputs
   function collect(){
     return {
@@ -185,4 +209,14 @@
     const ta = document.createElement('textarea'); ta.value = code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
     alert('Bookmarklet code copied! Create a bookmark, paste this as the URL. While on an article, tap it to send metadata here.');
   };
+
+    // ==== ISBN input listener
+  if ($("isbn")) {
+    $("isbn").addEventListener("change", () => {
+      const val = $("isbn").value.trim();
+      if (val) lookupISBN(val);
+    });
+  }
+
+  
 })();
