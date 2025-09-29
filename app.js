@@ -39,6 +39,7 @@
       accessed: $("accessed")?.value.trim() || "",
 
       // book
+      bookAuthor: $("bookAuthor")?.value.trim() || "",
       bookTitle: $("bookTitle")?.value.trim() || "",
       publisher: $("publisher")?.value.trim() || "",
       year: $("year")?.value.trim() || "",
@@ -50,19 +51,19 @@
   // ==== Formatters
   function formatBook(d){
     const style = $("style").value;
-    const ed = d.edition ? `${d.edition}. ` : "";
+    const edMLAChicago = d.edition ? `${d.edition}. ` : "";
     const city = d.city ? `${d.city}: ` : "";
     if (style === "APA"){
       // APA: Author. (Year). Book Title (Edition). Publisher.
       const edAPA = d.edition ? ` (${d.edition})` : "";
-      return `${d.author ? d.author + ". " : ""}${d.year ? `(${d.year}). ` : ""}${d.bookTitle ? d.bookTitle : ""}${edAPA}. ${d.publisher ? d.publisher + "." : ""}`.replace(/\s+/g,' ').trim();
+      return `${d.bookAuthor ? d.bookAuthor + ". " : ""}${d.year ? `(${d.year}). ` : ""}${d.bookTitle || ""}${edAPA}. ${d.publisher ? d.publisher + "." : ""}`.replace(/\s+/g,' ').trim();
     }
     if (style === "Chicago"){
       // Chicago: Author. Book Title. Edition. City: Publisher, Year.
-      return `${d.author ? d.author + ". " : ""}${d.bookTitle ? d.bookTitle + ". " : ""}${d.edition ? d.edition + ". " : ""}${city}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`.replace(/\s+/g,' ').trim();
+      return `${d.bookAuthor ? d.bookAuthor + ". " : ""}${d.bookTitle ? d.bookTitle + ". " : ""}${d.edition ? d.edition + ". " : ""}${city}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`.replace(/\s+/g,' ').trim();
     }
     // MLA: Author. Book Title. Edition. Publisher, Year.
-    return `${d.author ? d.author + ". " : ""}${d.bookTitle ? d.bookTitle + ". " : ""}${ed}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`.replace(/\s+/g,' ').trim();
+    return `${d.bookAuthor ? d.bookAuthor + ". " : ""}${d.bookTitle ? d.bookTitle + ". " : ""}${edMLAChicago}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`.replace(/\s+/g,' ').trim();
   }
 
   function formatWeb(d){
@@ -93,7 +94,7 @@
   }
 
   function isBookData(d){
-    return !!d.bookTitle; // if bookTitle provided, treat as book citation
+    return !!d.bookTitle || !!d.bookAuthor || !!d.publisher || !!d.year;
   }
 
   function formatByStyle(d){
@@ -104,7 +105,7 @@
   function coachHints(d){
     const issues=[];
     if (isBookData(d)){
-      if (!d.author) issues.push("Book: missing author.");
+      if (!d.bookAuthor) issues.push("Book: missing author.");
       if (!d.bookTitle) issues.push("Book: missing title.");
       if (!d.publisher) issues.push("Book: missing publisher.");
       if (!d.year) issues.push("Book: missing year.");
@@ -112,7 +113,7 @@
       if (!d.author) issues.push("Web: missing author (use organization if no person listed).");
       if (!d.title) issues.push("Web: missing article/page title.");
       if (!d.site) issues.push("Web: missing site/publisher name.");
-      if (!d.date) issues.push("Web: missing publish date (try to find updated/posted date).");
+      if (!d.date) issues.push("Web: missing publish date (try to find posted/updated date).");
       if (d.url && !/^https?:\/\//i.test(d.url)) issues.push("URL should start with https://");
     }
     return issues.length ? "• " + issues.join("\n• ") : "Looks complete. Nice!";
@@ -125,7 +126,7 @@
     $("hints").textContent = coachHints(d);
   }
 
-  ["author","title","site","date","url","accessed","style","bookTitle","publisher","year","edition","city"]
+  ["author","title","site","date","url","accessed","style","bookAuthor","bookTitle","publisher","year","edition","city"]
     .forEach(id => { if($(id)) $(id).addEventListener("input", render); });
   render();
 
@@ -134,8 +135,9 @@
 
   $("copyInText").onclick = () => {
     const d = collect();
-    // MLA in-text: (Author Page)
-    const last = d.author ? (d.author.split(',')[0] || d.author.split(' ').slice(-1)[0] || d.author) : '"Title"';
+    // MLA in-text prefers author last name. Prefer bookAuthor when in book mode.
+    const authorSource = isBookData(d) ? d.bookAuthor : d.author;
+    const last = authorSource ? (authorSource.split(',')[0] || authorSource.split(' ').slice(-1)[0] || authorSource) : '"Title"';
     const page = $("page").value.trim();
     const text = page ? `(${last} ${page})` : `(${last})`;
     navigator.clipboard.writeText(text);
