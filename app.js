@@ -39,7 +39,7 @@
   }
 
   function toLastFirst(name) {
-    if (/,/.test(name)) return name.trim();
+    if (/,/.test(name)) return name.trim(); // already Last, First
     const parts = name.trim().split(/\s+/);
     if (parts.length === 1) return parts[0];
     const last = parts.pop();
@@ -60,6 +60,7 @@
     if (authors.length === 0) return "";
 
     if (style === "APA") {
+      // Last, F. M., Last, F. M., & Last, F. M.
       const formatted = authors.map(a => {
         if (/,/.test(a)) {
           const [last, rest=""] = a.split(",").map(x=>x.trim());
@@ -76,14 +77,38 @@
       return formatted.slice(0, -1).join(", ") + ", & " + formatted.slice(-1);
     }
 
-    // MLA & Chicago
+    // MLA & Chicago: Last, First Middle; commas, "and" before last
     const formatted = authors.map(a => toLastFirst(a));
     if (formatted.length === 1) return formatted[0];
     if (formatted.length === 2) return `${formatted[0]} and ${formatted[1]}`;
     return formatted.slice(0, -1).join(", ") + ", and " + formatted.slice(-1);
   }
 
-  // ==== ISBN Lookup (with ISBN-10 → 13 support)
+  // ==== Title casing helpers
+  function titleCase(str=""){
+    const small = new Set(["a","an","and","as","at","but","by","for","in","nor","of","on","or","per","the","to","vs","via","with","over","under","into","onto","from","up","down","so","yet"]);
+    return String(str)
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w,i,arr)=>{
+        // hyphenated words
+        const cap = (s)=> s ? s[0].toUpperCase()+s.slice(1) : s;
+        if (w.includes("-")){
+          return w.split("-").map(p => cap(p)).join("-");
+        }
+        if (i===0 || i===arr.length-1 || !small.has(w)) return cap(w);
+        return w;
+      })
+      .join(" ");
+  }
+  function sentenceCase(str=""){
+    const s = String(str).trim();
+    if (!s) return s;
+    const lower = s.toLowerCase();
+    return lower[0].toUpperCase() + lower.slice(1);
+  }
+
+  // ==== ISBN Lookup (Open Library) + normalization
   async function lookupISBN(isbn13){
     try {
       const clean = isbn13.replace(/[^0-9X]/gi,'');
@@ -105,7 +130,6 @@
       alert("Error fetching ISBN data.");
     }
   }
-
   function toISBN13(isbn10) {
     const clean10 = isbn10.replace(/[^0-9X]/gi, "");
     if (clean10.length !== 10) return null;
@@ -117,7 +141,6 @@
     const check = (10 - (sum % 10)) % 10;
     return base + check;
   }
-
   function normalizeISBN(val) {
     const clean = val.replace(/[^0-9X]/gi, "");
     if (clean.length === 10) return toISBN13(clean);
@@ -162,37 +185,38 @@
     const pagesChicago = d.pages ? `pp. ${d.pages}.` : "";
     const pagesAPA = d.pages ? `(pp. ${d.pages})` : "";
 
+    const bookTitleOut = style === "APA" ? sentenceCase(d.bookTitle) : titleCase(d.bookTitle);
+    const chapterOut   = style === "APA" ? sentenceCase(d.chapterTitle) : titleCase(d.chapterTitle);
+
     if (style === "APA"){
       if (hasChapter){
-        // APA chapter: Author. (Year). Chapter title. In Book title (ed) (pp. xx–yy). Publisher.
+        // Author. (Year). Chapter. In Book (ed) (pp. xx–yy). Publisher.
         return `${authorOut ? authorOut + ". " : ""}`
              + `${d.year ? `(${d.year}). ` : ""}`
-             + `${d.chapterTitle ? d.chapterTitle + ". " : ""}`
-             + `In ${d.bookTitle || ""}${edAPA}${d.pages ? ` ${pagesAPA}` : ""}. `
+             + `${chapterOut ? chapterOut + ". " : ""}`
+             + `In ${bookTitleOut || ""}${edAPA}${d.pages ? ` ${pagesAPA}` : ""}. `
              + `${d.publisher ? d.publisher + "." : ""}`
              .replace(/\s+/g,' ').trim();
       }
-      // APA whole book
       return `${authorOut ? authorOut + ". " : ""}`
            + `${d.year ? `(${d.year}). ` : ""}`
-           + `${d.bookTitle || ""}${edAPA}. `
+           + `${bookTitleOut || ""}${edAPA}. `
            + `${d.publisher ? d.publisher + "." : ""}`
            .replace(/\s+/g,' ').trim();
     }
 
     if (style === "Chicago"){
       if (hasChapter){
-        // Chicago chapter: Author. "Chapter title." In Book Title, pp. xx–yy. City: Publisher, Year.
+        // Author. "Chapter." In Book, pp. xx–yy. City: Publisher, Year.
         return `${authorOut ? authorOut + ". " : ""}`
-             + `${d.chapterTitle ? `"${d.chapterTitle}." ` : ""}`
-             + `In ${d.bookTitle ? d.bookTitle + ", " : ""}`
+             + `${chapterOut ? `"${chapterOut}." ` : ""}`
+             + `In ${bookTitleOut ? bookTitleOut + ", " : ""}`
              + `${d.pages ? pagesChicago + " " : ""}`
              + `${city}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`
              .replace(/\s+/g,' ').trim();
       }
-      // Chicago whole book
       return `${authorOut ? authorOut + ". " : ""}`
-           + `${d.bookTitle ? d.bookTitle + ". " : ""}`
+           + `${bookTitleOut ? bookTitleOut + ". " : ""}`
            + `${d.edition ? d.edition + ". " : ""}`
            + `${city}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`
            .replace(/\s+/g,' ').trim();
@@ -200,17 +224,17 @@
 
     // MLA
     if (hasChapter){
-      // MLA chapter: Author. "Chapter title." Book Title. Publisher, Year, pp. xx–yy.
+      // Author. "Chapter." Book Title. Publisher, Year, pp. xx–yy.
       return `${authorOut ? authorOut + ". " : ""}`
-           + `${d.chapterTitle ? `"${d.chapterTitle}." ` : ""}`
-           + `${d.bookTitle ? d.bookTitle + ". " : ""}`
+           + `${chapterOut ? `"${chapterOut}." ` : ""}`
+           + `${bookTitleOut ? bookTitleOut + ". " : ""}`
            + `${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + ", " : ""}`
            + `${pagesMLA}`
            .replace(/\s+/g,' ').trim();
     }
-    // MLA whole book
+    // Whole book
     return `${authorOut ? authorOut + ". " : ""}`
-         + `${d.bookTitle ? d.bookTitle + ". " : ""}`
+         + `${bookTitleOut ? bookTitleOut + ". " : ""}`
          + `${d.edition ? d.edition + ". " : ""}`
          + `${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`
          .replace(/\s+/g,' ').trim();
@@ -219,24 +243,25 @@
   function formatWeb(d){
     const style = $("style").value;
     const authorOut = formatAuthorsByStyle(d.author, style);
+    const titleOut = style === "APA" ? sentenceCase(d.title) : titleCase(d.title);
 
     if (style === "APA"){
       const author = authorOut ? `${authorOut}. ` : "";
       const date = d.date ? `(${formatDateAPA(d.date)}). ` : "";
-      const title = d.title ? `${d.title}. ` : "";
+      const title = titleOut ? `${titleOut}. ` : "";
       const site = d.site ? `${d.site}. ` : "";
       return `${author}${date}${title}${site}${d.url}`.replace(/\s+/g,' ').trim();
     }
     if (style === "Chicago"){
       const author = authorOut ? `${authorOut}. ` : "";
-      const title = d.title ? `"${d.title}." ` : "";
+      const title = titleOut ? `"${titleOut}." ` : "";
       const site = d.site ? `${d.site}. ` : "";
       const date = d.date ? `${formatDateAPA(d.date)}. ` : "";
       return `${author}${title}${site}${date}${d.url || ""}`.replace(/\s+/g,' ').trim();
     }
     // MLA
     const author = authorOut ? `${authorOut}. ` : "";
-    const title = d.title ? `"${d.title}." ` : "";
+    const title = titleOut ? `"${titleOut}." ` : "";
     const site = d.site ? `${d.site}, ` : "";
     const date = d.date ? `${formatDateMLA(d.date)}, ` : "";
     const access = d.accessed ? `Accessed ${formatDateMLA(d.accessed)}.` : "";
@@ -288,7 +313,7 @@
     const style = $("style").value;
     const src = isBookData(d) ? d.bookAuthor : d.author;
     const formatted = formatAuthorsByStyle(src, style);
-    // First author's last name
+    // First author's last name for MLA in-text
     let last = "";
     if (formatted) {
       const firstAuthor = formatted.split(/, and | and |, & | & |, /)[0];
