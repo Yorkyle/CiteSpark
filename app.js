@@ -27,29 +27,103 @@
     return `${d.getFullYear()}, ${months[d.getMonth()]} ${d.getDate()}`;
   }
 
-  // ==== ISBN Lookup
-async function lookupISBN(isbn){
-  try {
-    const clean = isbn.replace(/[^0-9X]/gi,''); // strip dashes/spaces
-    const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${clean}&jscmd=data&format=json`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const book = data[`ISBN:${clean}`];
-    if (book){
-      if (book.title) $("bookTitle").value = book.title;
-      if (book.publish_date) $("year").value = book.publish_date.replace(/\D/g,'');
-      if (book.publishers && book.publishers.length) $("publisher").value = book.publishers[0].name;
-      if (book.authors && book.authors.length) $("bookAuthor").value = book.authors.map(a=>a.name).join(", ");
-      render();
-    } else {
-      alert("No book found for that ISBN.");
+  // ==== Author name helpers
+  function splitAuthors(raw) {
+    if (!raw) return [];
+    const s = raw.replace(/\s+&\s+/g, " and ");
+    let parts = s.split(/\s+and\s+|;|\s*\|\s*/i);
+    if (parts.length === 1 && /,/.test(raw) && !/,\s*Jr\.?$/i.test(raw)) {
+      parts = raw.split(/\s+and\s+/i);
     }
-  } catch(err){
-    console.error(err);
-    alert("Error fetching ISBN data.");
+    return parts.map(p => p.trim()).filter(Boolean);
   }
-}
 
+  function toLastFirst(name) {
+    if (/,/.test(name)) return name.trim();
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0];
+    const last = parts.pop();
+    const firstMiddle = parts.join(" ");
+    return `${last}, ${firstMiddle}`;
+  }
+
+  function initials(str) {
+    return str
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(w => w[0].toUpperCase() + ".")
+      .join(" ");
+  }
+
+  function formatAuthorsByStyle(raw, style) {
+    const authors = splitAuthors(raw);
+    if (authors.length === 0) return "";
+
+    if (style === "APA") {
+      const formatted = authors.map(a => {
+        if (/,/.test(a)) {
+          const [last, rest=""] = a.split(",").map(x=>x.trim());
+          return `${last}, ${initials(rest)}`;
+        } else {
+          const parts = a.split(/\s+/);
+          const last = parts.pop();
+          const firstMiddle = parts.join(" ");
+          return `${last}, ${initials(firstMiddle)}`;
+        }
+      });
+      if (formatted.length === 1) return formatted[0];
+      if (formatted.length === 2) return `${formatted[0]} & ${formatted[1]}`;
+      return formatted.slice(0, -1).join(", ") + ", & " + formatted.slice(-1);
+    }
+
+    // MLA & Chicago
+    const formatted = authors.map(a => toLastFirst(a));
+    if (formatted.length === 1) return formatted[0];
+    if (formatted.length === 2) return `${formatted[0]} and ${formatted[1]}`;
+    return formatted.slice(0, -1).join(", ") + ", and " + formatted.slice(-1);
+  }
+
+  // ==== ISBN Lookup (with ISBN-10 → 13 support)
+  async function lookupISBN(isbn13){
+    try {
+      const clean = isbn13.replace(/[^0-9X]/gi,'');
+      const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${clean}&jscmd=data&format=json`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const book = data[`ISBN:${clean}`];
+      if (book){
+        if (book.title) $("bookTitle").value = book.title;
+        if (book.publish_date) $("year").value = book.publish_date.replace(/\D/g,'');
+        if (book.publishers && book.publishers.length) $("publisher").value = book.publishers[0].name;
+        if (book.authors && book.authors.length) $("bookAuthor").value = book.authors.map(a=>a.name).join(", ");
+        render();
+      } else {
+        alert("No book found for that ISBN.");
+      }
+    } catch(err){
+      console.error(err);
+      alert("Error fetching ISBN data.");
+    }
+  }
+
+  function toISBN13(isbn10) {
+    const clean10 = isbn10.replace(/[^0-9X]/gi, "");
+    if (clean10.length !== 10) return null;
+    const base = "978" + clean10.slice(0, 9);
+    let sum = 0;
+    for (let i = 0; i < base.length; i++) {
+      sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3);
+    }
+    const check = (10 - (sum % 10)) % 10;
+    return base + check;
+  }
+
+  function normalizeISBN(val) {
+    const clean = val.replace(/[^0-9X]/gi, "");
+    if (clean.length === 10) return toISBN13(clean);
+    if (clean.length === 13) return clean;
+    return null;
+  }
 
   // ==== Gather inputs
   function collect(){
@@ -68,48 +142,100 @@ async function lookupISBN(isbn){
       publisher: $("publisher")?.value.trim() || "",
       year: $("year")?.value.trim() || "",
       edition: $("edition")?.value.trim() || "",
-      city: $("city")?.value.trim() || ""
+      city: $("city")?.value.trim() || "",
+      chapterTitle: $("chapterTitle")?.value.trim() || "",
+      pages: $("pages")?.value.trim() || "",
+      isbn: $("isbn")?.value.trim() || ""
     };
   }
 
   // ==== Formatters
   function formatBook(d){
     const style = $("style").value;
+    const authorOut = formatAuthorsByStyle(d.bookAuthor, style);
+
+    const hasChapter = !!d.chapterTitle || !!d.pages;
     const edMLAChicago = d.edition ? `${d.edition}. ` : "";
+    const edAPA = d.edition ? ` (${d.edition})` : "";
     const city = d.city ? `${d.city}: ` : "";
+    const pagesMLA = d.pages ? `pp. ${d.pages}.` : "";
+    const pagesChicago = d.pages ? `pp. ${d.pages}.` : "";
+    const pagesAPA = d.pages ? `(pp. ${d.pages})` : "";
+
     if (style === "APA"){
-      // APA: Author. (Year). Book Title (Edition). Publisher.
-      const edAPA = d.edition ? ` (${d.edition})` : "";
-      return `${d.bookAuthor ? d.bookAuthor + ". " : ""}${d.year ? `(${d.year}). ` : ""}${d.bookTitle || ""}${edAPA}. ${d.publisher ? d.publisher + "." : ""}`.replace(/\s+/g,' ').trim();
+      if (hasChapter){
+        // APA chapter: Author. (Year). Chapter title. In Book title (ed) (pp. xx–yy). Publisher.
+        return `${authorOut ? authorOut + ". " : ""}`
+             + `${d.year ? `(${d.year}). ` : ""}`
+             + `${d.chapterTitle ? d.chapterTitle + ". " : ""}`
+             + `In ${d.bookTitle || ""}${edAPA}${d.pages ? ` ${pagesAPA}` : ""}. `
+             + `${d.publisher ? d.publisher + "." : ""}`
+             .replace(/\s+/g,' ').trim();
+      }
+      // APA whole book
+      return `${authorOut ? authorOut + ". " : ""}`
+           + `${d.year ? `(${d.year}). ` : ""}`
+           + `${d.bookTitle || ""}${edAPA}. `
+           + `${d.publisher ? d.publisher + "." : ""}`
+           .replace(/\s+/g,' ').trim();
     }
+
     if (style === "Chicago"){
-      // Chicago: Author. Book Title. Edition. City: Publisher, Year.
-      return `${d.bookAuthor ? d.bookAuthor + ". " : ""}${d.bookTitle ? d.bookTitle + ". " : ""}${d.edition ? d.edition + ". " : ""}${city}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`.replace(/\s+/g,' ').trim();
+      if (hasChapter){
+        // Chicago chapter: Author. "Chapter title." In Book Title, pp. xx–yy. City: Publisher, Year.
+        return `${authorOut ? authorOut + ". " : ""}`
+             + `${d.chapterTitle ? `"${d.chapterTitle}." ` : ""}`
+             + `In ${d.bookTitle ? d.bookTitle + ", " : ""}`
+             + `${d.pages ? pagesChicago + " " : ""}`
+             + `${city}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`
+             .replace(/\s+/g,' ').trim();
+      }
+      // Chicago whole book
+      return `${authorOut ? authorOut + ". " : ""}`
+           + `${d.bookTitle ? d.bookTitle + ". " : ""}`
+           + `${d.edition ? d.edition + ". " : ""}`
+           + `${city}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`
+           .replace(/\s+/g,' ').trim();
     }
-    // MLA: Author. Book Title. Edition. Publisher, Year.
-    return `${d.bookAuthor ? d.bookAuthor + ". " : ""}${d.bookTitle ? d.bookTitle + ". " : ""}${edMLAChicago}${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`.replace(/\s+/g,' ').trim();
+
+    // MLA
+    if (hasChapter){
+      // MLA chapter: Author. "Chapter title." Book Title. Publisher, Year, pp. xx–yy.
+      return `${authorOut ? authorOut + ". " : ""}`
+           + `${d.chapterTitle ? `"${d.chapterTitle}." ` : ""}`
+           + `${d.bookTitle ? d.bookTitle + ". " : ""}`
+           + `${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + ", " : ""}`
+           + `${pagesMLA}`
+           .replace(/\s+/g,' ').trim();
+    }
+    // MLA whole book
+    return `${authorOut ? authorOut + ". " : ""}`
+         + `${d.bookTitle ? d.bookTitle + ". " : ""}`
+         + `${d.edition ? d.edition + ". " : ""}`
+         + `${d.publisher ? d.publisher + ", " : ""}${d.year ? d.year + "." : ""}`
+         .replace(/\s+/g,' ').trim();
   }
 
   function formatWeb(d){
     const style = $("style").value;
+    const authorOut = formatAuthorsByStyle(d.author, style);
+
     if (style === "APA"){
-      // APA Web: Author. (Year, Month Day). Title. Site. URL
-      const author = d.author ? `${d.author}. ` : "";
+      const author = authorOut ? `${authorOut}. ` : "";
       const date = d.date ? `(${formatDateAPA(d.date)}). ` : "";
       const title = d.title ? `${d.title}. ` : "";
       const site = d.site ? `${d.site}. ` : "";
       return `${author}${date}${title}${site}${d.url}`.replace(/\s+/g,' ').trim();
     }
     if (style === "Chicago"){
-      // Chicago Web: Author. "Title." Site. Date. URL.
-      const author = d.author ? `${d.author}. ` : "";
+      const author = authorOut ? `${authorOut}. ` : "";
       const title = d.title ? `"${d.title}." ` : "";
       const site = d.site ? `${d.site}. ` : "";
       const date = d.date ? `${formatDateAPA(d.date)}. ` : "";
       return `${author}${title}${site}${date}${d.url || ""}`.replace(/\s+/g,' ').trim();
     }
-    // MLA Web: Author. "Title." Site, Day Mon Year, URL. Accessed Day Mon Year.
-    const author = d.author ? `${d.author}. ` : "";
+    // MLA
+    const author = authorOut ? `${authorOut}. ` : "";
     const title = d.title ? `"${d.title}." ` : "";
     const site = d.site ? `${d.site}, ` : "";
     const date = d.date ? `${formatDateMLA(d.date)}, ` : "";
@@ -118,7 +244,7 @@ async function lookupISBN(isbn){
   }
 
   function isBookData(d){
-    return !!d.bookTitle || !!d.bookAuthor || !!d.publisher || !!d.year;
+    return !!d.bookTitle || !!d.bookAuthor || !!d.publisher || !!d.year || !!d.chapterTitle || !!d.pages;
   }
 
   function formatByStyle(d){
@@ -150,7 +276,7 @@ async function lookupISBN(isbn){
     $("hints").textContent = coachHints(d);
   }
 
-  ["author","title","site","date","url","accessed","style","bookAuthor","bookTitle","publisher","year","edition","city"]
+  ["author","title","site","date","url","accessed","style","bookAuthor","bookTitle","publisher","year","edition","city","chapterTitle","pages","isbn"]
     .forEach(id => { if($(id)) $(id).addEventListener("input", render); });
   render();
 
@@ -159,10 +285,23 @@ async function lookupISBN(isbn){
 
   $("copyInText").onclick = () => {
     const d = collect();
-    // MLA in-text prefers author last name. Prefer bookAuthor when in book mode.
-    const authorSource = isBookData(d) ? d.bookAuthor : d.author;
-    const last = authorSource ? (authorSource.split(',')[0] || authorSource.split(' ').slice(-1)[0] || authorSource) : '"Title"';
-    const page = $("page").value.trim();
+    const style = $("style").value;
+    const src = isBookData(d) ? d.bookAuthor : d.author;
+    const formatted = formatAuthorsByStyle(src, style);
+    // First author's last name
+    let last = "";
+    if (formatted) {
+      const firstAuthor = formatted.split(/, and | and |, & | & |, /)[0];
+      if (/,/.test(firstAuthor)) last = firstAuthor.split(",")[0];
+      else {
+        const parts = firstAuthor.trim().split(/\s+/);
+        last = parts.length ? parts[parts.length-1] : "";
+      }
+    } else {
+      last = '"Title"';
+    }
+    const firstPageFromRange = d.pages ? (d.pages.match(/\d+/)?.[0] || "") : "";
+    const page = $("page").value.trim() || firstPageFromRange;
     const text = page ? `(${last} ${page})` : `(${last})`;
     navigator.clipboard.writeText(text);
   };
@@ -206,17 +345,29 @@ async function lookupISBN(isbn){
   // Bookmarklet (prefills web fields, not book fields)
   $("bookmarkletBtn").onclick = () => {
     const code = `javascript:(function(){var m=document.querySelector.bind(document);var t=document.title;var u=location.href;var s=(m('meta[property=\\"og:site_name\\"]')||{}).content||(location.hostname||'');var a=(m('meta[name=\\"author\\"]')||m('meta[property=\\"article:author\\"]')||{}).content||'';var d=(m('meta[property=\\"article:published_time\\"]')||m('meta[name=\\"date\\"]')||{}).content||'';var app='${location.origin+location.pathname}';var q='?t='+encodeURIComponent(t)+'&u='+encodeURIComponent(u)+'&s='+encodeURIComponent(s)+'&a='+encodeURIComponent(a)+'&d='+encodeURIComponent(d);location.href=app+q;})();`;
-    const ta = document.createElement('textarea'); ta.value = code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    const ta = document.createElement("textarea"); ta.value = code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
     alert('Bookmarklet code copied! Create a bookmark, paste this as the URL. While on an article, tap it to send metadata here.');
   };
 
-    // ==== ISBN input listener
+  // ==== ISBN input listener (debounced + Enter + 10→13 conversion)
   if ($("isbn")) {
-    $("isbn").addEventListener("change", () => {
-      const val = $("isbn").value.trim();
-      if (val) lookupISBN(val);
+    let t;
+    $("isbn").addEventListener("input", () => {
+      clearTimeout(t);
+      const raw = $("isbn").value.trim();
+      const normalized = normalizeISBN(raw);
+      if (normalized) {
+        t = setTimeout(() => lookupISBN(normalized), 400);
+      }
+    });
+    $("isbn").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const raw = $("isbn").value.trim();
+        const normalized = normalizeISBN(raw);
+        if (normalized) lookupISBN(normalized);
+        else alert("Please enter a valid ISBN-10 or ISBN-13.");
+      }
     });
   }
-
-  
 })();
